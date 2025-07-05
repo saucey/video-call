@@ -32,38 +32,27 @@ interface AnswerSignal {
   to: string;
 }
 
-const userSocketMap = new Map<string, string>();
-
 io.on("connection", (socket: Socket) => {
   console.log("User connected:", socket.id);
-
-  socket.on("register-id", (customId: string) => {
-    userSocketMap.set(customId, socket.id);
-    console.log(`Registered ID: ${customId} -> ${socket.id}`);
-  });
+  socket.emit("your-id", socket.id);
 
   socket.on("call-user", ({ userToCall, signalData, from }: CallSignal) => {
-    const targetSocketId = userSocketMap.get(userToCall);
-    if (targetSocketId) {
-      io.to(targetSocketId).emit("call-made", { signal: signalData, from });
-    }
+    console.log(`Call from ${from} to ${userToCall}`);
+    io.to(userToCall).emit("call-made", { signal: signalData, from });
   });
 
   socket.on("answer-call", ({ signal, to }: AnswerSignal) => {
-    const targetSocketId = userSocketMap.get(to);
-    if (targetSocketId) {
-      io.to(targetSocketId).emit("call-answered", signal);
-    }
+    console.log(`Answer from ${socket.id} to ${to}`);
+    io.to(to).emit("call-answered", signal);
+  });
+
+  socket.on("end-call", () => {
+    console.log(`Call ended by ${socket.id}`);
+    socket.broadcast.emit("call-ended");
   });
 
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.id);
-    for (const [key, val] of userSocketMap.entries()) {
-      if (val === socket.id) {
-        userSocketMap.delete(key);
-        break;
-      }
-    }
     socket.broadcast.emit("call-ended");
   });
 });
