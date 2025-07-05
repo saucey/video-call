@@ -13,6 +13,8 @@ const io = new Server(server, {
     origin: "*",
     methods: ["GET", "POST"],
   },
+  path: "/socket.io", // Explicit path
+  transports: ["websocket"], // Force WebSocket only
 });
 
 // Define interface for better type checking
