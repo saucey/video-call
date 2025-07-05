@@ -64,7 +64,6 @@ io.on("connection", (socket: Socket) => {
     // Notify all other users about the new registration
     socket.broadcast.emit("user-registered", newUser);
 
-    console.log(`User registered: ${customId} (${socket.id})`);
   });
 
   socket.on(
