@@ -13,8 +13,14 @@
       origin: "*",
       methods: ["GET", "POST"],
     },
-    path: "/socket.io", // Explicit path
-    transports: ["websocket"], // Force WebSocket only
+    // Remove explicit path if not needed
+    // path: "/socket.io",
+    transports: ["websocket", "polling"], // Add polling as fallback
+    allowEIO3: true, // Enable v3 compatibility
+    connectionStateRecovery: {
+      maxDisconnectionDuration: 2 * 60 * 1000,
+      skipMiddlewares: true,
+    },
   });
 
   // Define interface for better type checking
@@ -50,6 +56,6 @@
   });
 
   const PORT = Number(process.env.PORT) || 5000;
-  server.listen(PORT, "0.0.0.0", () => {
+  server.listen(PORT, () => {
     console.log(`Signaling server is running on ${PORT}`);
   });
