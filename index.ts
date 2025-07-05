@@ -40,12 +40,15 @@ io.on("connection", (socket: Socket) => {
   socket.on("register-id", (customId: string) => {
     userSocketMap.set(customId, socket.id);
     console.log(`Registered ID: ${customId} -> ${socket.id}`);
+    socket.emit("id-registered", { success: true });
   });
 
   socket.on("call-user", ({ userToCall, signalData, from }: CallSignal) => {
     const targetSocketId = userSocketMap.get(userToCall);
     if (targetSocketId) {
       io.to(targetSocketId).emit("call-made", { signal: signalData, from });
+    } else {
+      io.to(socket.id).emit("user-not-found", { userToCall });
     }
   });
 
@@ -64,7 +67,6 @@ io.on("connection", (socket: Socket) => {
         break;
       }
     }
-    socket.broadcast.emit("call-ended");
   });
 });
 
