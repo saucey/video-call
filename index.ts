@@ -21,10 +21,16 @@ const io = new Server(server, {
   },
 });
 
+interface RegisteredUser {
+  socketId: string;
+  customId: string;
+}
+
 interface CallSignal {
   userToCall: string;
   signalData: any;
   from: string;
+  customId: string;
 }
 
 interface AnswerSignal {
@@ -32,41 +38,71 @@ interface AnswerSignal {
   to: string;
 }
 
-const userSocketMap = new Map<string, string>();
+const registeredUsers: RegisteredUser[] = [];
 
 io.on("connection", (socket: Socket) => {
   console.log("User connected:", socket.id);
 
-  socket.on("register-id", (customId: string) => {
-    userSocketMap.set(customId, socket.id);
-    console.log(`Registered ID: ${customId} -> ${socket.id}`);
-    socket.emit("id-registered", { success: true });
+  socket.on("register", (customId: string) => {
+    // Check if custom ID is already taken
+    const existingUser = registeredUsers.find(
+      (user) => user.customId === customId
+    );
+    if (existingUser) {
+      socket.emit("registration-error", "Custom ID already in use");
+      return;
+    }
+
+    const newUser = { socketId: socket.id, customId };
+    registeredUsers.push(newUser);
+
+    // Notify the new user about all registered users
+    socket.emit("registered", registeredUsers);
+
+    // Notify all other users about the new registration
+    socket.broadcast.emit("user-registered", newUser);
+
+    console.log(`User registered: ${customId} (${socket.id})`);
   });
 
-  socket.on("call-user", ({ userToCall, signalData, from }: CallSignal) => {
-    const targetSocketId = userSocketMap.get(userToCall);
-    if (targetSocketId) {
-      io.to(targetSocketId).emit("call-made", { signal: signalData, from });
-    } else {
-      io.to(socket.id).emit("user-not-found", { userToCall });
+  socket.on(
+    "call-user",
+    ({ userToCall, signalData, from, customId }: CallSignal) => {
+      const callerUser = registeredUsers.find((u) => u.socketId === from);
+      const calleeUser = registeredUsers.find((u) => u.socketId === userToCall);
+
+      if (!callerUser || !calleeUser) {
+        socket.emit("call-error", "User not found");
+        return;
+      }
+
+      io.to(userToCall).emit("call-made", {
+        signal: signalData,
+        from,
+        customId: callerUser.customId,
+      });
     }
-  });
+  );
 
   socket.on("answer-call", ({ signal, to }: AnswerSignal) => {
-    const targetSocketId = userSocketMap.get(to);
-    if (targetSocketId) {
-      io.to(targetSocketId).emit("call-answered", signal);
-    }
+    io.to(to).emit("call-answered", signal);
+  });
+
+  socket.on("end-call", () => {
+    socket.broadcast.emit("call-ended");
   });
 
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.id);
-    for (const [key, val] of userSocketMap.entries()) {
-      if (val === socket.id) {
-        userSocketMap.delete(key);
-        break;
-      }
+
+    // Remove from registered users
+    const index = registeredUsers.findIndex((u) => u.socketId === socket.id);
+    if (index !== -1) {
+      registeredUsers.splice(index, 1);
+      io.emit("user-unregistered", socket.id);
     }
+
+    socket.broadcast.emit("call-ended");
   });
 });
 
