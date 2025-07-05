@@ -1,0 +1,15 @@
+name: Deploy to Coolify 2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Coolify Deployment 2
+        run: |
+          curl -X POST "https://s1.devonauts.co.uk/api/v1/deploy?uuid=${{ secrets.VIDEO_CALL_DEPLOY_UUID }}&force=false" \
+            -H "Authorization: Bearer ${{ secrets.VIDEO_CALL_TOKEN }}"
