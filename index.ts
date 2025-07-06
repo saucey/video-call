@@ -43,15 +43,18 @@ interface AnswerSignal {
 const registeredUsers: RegisteredUser[] = [];
 
 io.on("connection", (socket: Socket) => {
-  console.log("User connected:", socket.id);
-
+  console.log("User connected?????:", socket.id);
+  
   socket.on("register", (customId: string) => {
+    console.log("REG:", socket.id); 
+
     // Check if custom ID is already taken
     const existingUser = registeredUsers.find(
       (user) => user.customId === customId
     );
     if (existingUser) {
-      socket.emit("registration-error", "Custom ID already in use");
+      console.log("Custom ID already in use:", customId);
+      socket.emit("registration-error", "Custom ID already in use!!!");
       return;
     }
 
