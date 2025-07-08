@@ -176,20 +176,59 @@ io.on("connection", (socket: Socket) => {
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.id);
 
-    const user = registeredUsers.find((u) => u.socketId === socket.id);
-    if (user) {
-      // If they were in a call, notify the other party
-      if (user.inCallWith) {
-        io.to(user.inCallWith).emit("call-ended");
-        updateUserStatus(user.inCallWith, {
+    const disconnectedUser = registeredUsers.find(
+      (u) => u.socketId === socket.id
+    );
+
+    if (disconnectedUser) {
+      // 1. Find all users who were in a call with the disconnected user
+      const affectedUsers = registeredUsers.filter(
+        (user) => user.inCallWith === socket.id
+      );
+
+      // 2. Notify each affected user
+      affectedUsers.forEach((user) => {
+        console.log(`Notifying ${user.socketId} about disconnection`);
+        io.to(user.socketId).emit("call-ended", {
+          reason: `${disconnectedUser.customId || "The user"} has disconnected`,
+          socketId: socket.id,
+        });
+
+        // Update their status
+        updateUserStatus(user.socketId, {
           inCall: false,
           inCallWith: undefined,
         });
+      });
+
+      // 3. If the disconnected user was in a call, notify their partner
+      if (disconnectedUser.inCallWith) {
+        const partner = registeredUsers.find(
+          (u) => u.socketId === disconnectedUser.inCallWith
+        );
+        if (partner) {
+          console.log(`Notifying partner ${partner.socketId}`);
+          io.to(disconnectedUser.inCallWith).emit("call-ended", {
+            reason: `${
+              disconnectedUser.customId || "Your call partner"
+            } has disconnected`,
+            socketId: socket.id,
+          });
+
+          updateUserStatus(disconnectedUser.inCallWith, {
+            inCall: false,
+            inCallWith: undefined,
+          });
+        }
       }
 
-      // Remove user
+      // 4. Remove the disconnected user
       const index = registeredUsers.findIndex((u) => u.socketId === socket.id);
-      registeredUsers.splice(index, 1);
+      if (index !== -1) {
+        registeredUsers.splice(index, 1);
+      }
+
+      // 5. Broadcast the unregistration
       io.emit("user-unregistered", socket.id);
     }
   });
