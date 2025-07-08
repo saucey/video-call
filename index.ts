@@ -42,6 +42,12 @@ interface AnswerSignal {
   to: string;
 }
 
+interface RejectSignal {
+  signal: any;
+  to: string;
+}
+
+
 const registeredUsers: RegisteredUser[] = [];
 
 // Helper function to update user status and notify all clients
@@ -49,6 +55,7 @@ const updateUserStatus = (
   socketId: string,
   status: Partial<RegisteredUser>
 ) => {
+  console.log('SHOULD UPDATE USER STATUS')
   const userIndex = registeredUsers.findIndex((u) => u.socketId === socketId);
   if (userIndex !== -1) {
     registeredUsers[userIndex] = { ...registeredUsers[userIndex], ...status };
@@ -97,6 +104,13 @@ io.on("connection", (socket: Socket) => {
         return;
       }
 
+      // Don't allow calls if either user is already in a call
+      if (caller.inCall || callee.inCall) {
+        console.log("Call failed - user busy");
+        socket.emit("call-error", "User is already in a call");
+        return;
+      }
+
       // Update caller status immediately
       updateUserStatus(from, { inCall: true, inCallWith: userToCall });
 
@@ -123,6 +137,7 @@ io.on("connection", (socket: Socket) => {
 
     // Find who they were in call with
     const user = registeredUsers.find((u) => u.socketId === socket.id);
+
     if (user?.inCallWith) {
       // Update both parties' status
       updateUserStatus(socket.id, { inCall: false, inCallWith: undefined });
@@ -130,9 +145,32 @@ io.on("connection", (socket: Socket) => {
         inCall: false,
         inCallWith: undefined,
       });
+
+      // Notify the other party
+      io.to(user.inCallWith).emit("call-ended");
+    } else {
+      // If no inCallWith but was in call (call rejected case)
+      updateUserStatus(socket.id, { inCall: false, inCallWith: undefined });
+    }
+  });
+
+  socket.on("reject-call", ({ to }: { to: string }) => {
+    console.log("Call rejected by:", socket.id, "to:", to);
+
+    // Find both users
+    const caller = registeredUsers.find((u) => u.socketId === to);
+    const callee = registeredUsers.find((u) => u.socketId === socket.id);
+
+    // Update both parties' status if they exist
+    if (caller) {
+      updateUserStatus(to, { inCall: false, inCallWith: undefined });
+    }
+    if (callee) {
+      updateUserStatus(socket.id, { inCall: false, inCallWith: undefined });
     }
 
-    socket.broadcast.emit("call-ended");
+    // Notify the caller
+    io.to(to).emit("call-rejected");
   });
 
   socket.on("disconnect", () => {
