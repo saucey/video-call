@@ -87,14 +87,9 @@ io.on("connection", (socket: Socket) => {
 
     console.log("New user registered:", newUser);
 
-    // First emit to the registering user
-    socket.emit("registered", registeredUsers);
-
-    // Then broadcast to all other users
-    socket.broadcast.emit("user-registered", newUser);
-
-    // Also emit to the registering user so they get their welcome message
-    socket.emit("user-registered", newUser);
+    // Emit to all clients including the new one
+    io.emit("users-updated", registeredUsers);
+    socket.emit("user-registered", newUser); // For welcome message
   });
 
   socket.on(
