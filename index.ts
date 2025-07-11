@@ -23,6 +23,15 @@ const io = new Server(server, {
   },
 });
 
+interface MeetingRoom {
+  id: string;
+  name: string;
+  createdBy: string; // socketId of creator
+  admin: string; // socketId of admin
+  participants: string[]; // socketIds of participants
+  createdAt: Date;
+}
+
 interface RegisteredUser {
   socketId: string;
   customId: string;
@@ -49,6 +58,7 @@ interface RejectSignal {
 
 
 const registeredUsers: RegisteredUser[] = [];
+const meetingRooms: MeetingRoom[] = [];
 
 // Helper function to update user status and notify all clients
 const updateUserStatus = (
@@ -233,6 +243,65 @@ io.on("connection", (socket: Socket) => {
       // 5. Broadcast the unregistration
       io.emit("user-unregistered", socket.id);
     }
+  });
+
+  // Create meeting room
+  socket.on("create-room", (roomName: string) => {
+    const roomId = `room_${Date.now()}`;
+    const newRoom: MeetingRoom = {
+      id: roomId,
+      name: roomName,
+      createdBy: socket.id,
+      admin: socket.id,
+      participants: [socket.id],
+      createdAt: new Date(),
+    };
+
+    meetingRooms.push(newRoom);
+    io.emit("room-created", newRoom);
+  });
+
+  // Join meeting room
+  socket.on("join-room", (roomId: string) => {
+    const room = meetingRooms.find((r) => r.id === roomId);
+    if (room) {
+      room.participants.push(socket.id);
+      io.to(roomId).emit("room-updated", room);
+      io.emit("rooms-updated", meetingRooms); // Update all clients
+    }
+  });
+
+  // Leave meeting room
+  socket.on("leave-room", (roomId: string) => {
+    const room = meetingRooms.find((r) => r.id === roomId);
+    if (room) {
+      room.participants = room.participants.filter((id) => id !== socket.id);
+
+      // Delete room if empty
+      if (room.participants.length === 0) {
+        meetingRooms.splice(meetingRooms.indexOf(room), 1);
+      }
+
+      io.emit("rooms-updated", meetingRooms);
+    }
+  });
+
+  // Get all rooms
+  socket.on("get-rooms", () => {
+    socket.emit("rooms-updated", meetingRooms);
+  });
+
+  // Handle disconnects
+  socket.on("disconnect", () => {
+    meetingRooms.forEach((room) => {
+      if (room.participants.includes(socket.id)) {
+        room.participants = room.participants.filter((id) => id !== socket.id);
+        if (room.participants.length === 0) {
+          meetingRooms.splice(meetingRooms.indexOf(room), 1);
+        }
+      }
+    });
+    io.emit("rooms-updated", meetingRooms);
   });
 });
 
