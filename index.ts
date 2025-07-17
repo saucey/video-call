@@ -261,16 +261,6 @@ io.on("connection", (socket: Socket) => {
     io.emit("room-created", newRoom);
   });
 
-  // Join meeting room
-  socket.on("join-room", (roomId: string) => {
-    const room = meetingRooms.find((r) => r.id === roomId);
-    if (room) {
-      room.participants.push(socket.id);
-      io.to(roomId).emit("room-updated", room);
-      io.emit("rooms-updated", meetingRooms); // Update all clients
-    }
-  });
-
   // Leave meeting room
   socket.on("leave-room", (roomId: string) => {
     const room = meetingRooms.find((r) => r.id === roomId);
@@ -291,11 +281,36 @@ io.on("connection", (socket: Socket) => {
     socket.emit("rooms-updated", meetingRooms);
   });
 
-  // Handle disconnects
+  // Add this to server code
+  socket.on("room-signal", ({ targetId, signal, roomId }) => {
+    console.log(
+      `Relaying signal in room ${roomId} from ${socket.id} to ${targetId}`
+    );
+    io.to(targetId).emit("room-signal", { signal, from: socket.id, roomId });
+  });
+
+  // Update join-room handler
+  socket.on("join-room", (roomId: string) => {
+    const room = meetingRooms.find((r) => r.id === roomId);
+    if (room) {
+      // Notify existing participants about new participant
+      io.to(roomId).emit("new-participant", socket.id);
+
+      room.participants.push(socket.id);
+      io.to(roomId).emit("room-updated", room);
+      io.emit("rooms-updated", meetingRooms);
+    }
+  });
+
   socket.on("disconnect", () => {
     meetingRooms.forEach((room) => {
       if (room.participants.includes(socket.id)) {
         room.participants = room.participants.filter((id) => id !== socket.id);
+
+        // Notify remaining participants
+        io.to(room.id).emit("participant-left", socket.id);
+        io.to(room.id).emit("room-updated", room);
+
         if (room.participants.length === 0) {
           meetingRooms.splice(meetingRooms.indexOf(room), 1);
         }
